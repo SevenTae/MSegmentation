@@ -12,7 +12,6 @@ def computDiceloss(inputs, target, num_classes, ignore_index):
     diceloss = 0
     for name, x in inputs.items():
         # 忽略target中值为255的像素，255的像素是目标边缘或者padding填充
-        loss= 0
         dice_target = build_target(target, num_classes, ignore_index)
         diceloss += dice_loss(x, dice_target, multiclass=True, ignore_index=ignore_index)
     return dice_loss
@@ -106,12 +105,13 @@ def evalue_iou_miou_Dice(model, data_loader, device, num_classes,isResize=None,i
                 output = torch.softmax(output, dim=1)  # b，dm h w
                 output = output.argmax(1)
             confmat.update(target.flatten(), output.flatten())
-        confmat.compute()
+        # confmat.compute()
 
     if isDice:
-        diceloss=0
+
         header1 = 'Test Dice:'
         metric_logger2 = utils.MetricLogger(delimiter="  ")
+        dice = utils.DiceCoefficient(num_classes=num_classes, ignore_index=255)
         with torch.no_grad():
             for image, target in metric_logger2.log_every(data_loader, 100, header1):
                 image, target = batch['image'], batch['label']
@@ -119,9 +119,7 @@ def evalue_iou_miou_Dice(model, data_loader, device, num_classes,isResize=None,i
                 target = target.to(device=device, dtype=torch.long)
                 model = model.to(device)
                 output = model(image)
-                for name, x in output.items():
-                    dice_target = build_target(target, num_classes, ignore_index)
-                diceloss +=dice_loss(x, dice_target, multiclass=True, ignore_index=ignore_index)
+                dice.update(output, target)
 
-        return confmat.re_zhib() ,diceloss #返回confmat.re_zhib()acc_global, acc, iu,miou,
+        return confmat.re_zhib() ,dice.value.item() #返回confmat.re_zhib()acc_global, acc, iu,miou,
     return confmat.re_zhib()
