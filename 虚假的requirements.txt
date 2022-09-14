@@ -1,0 +1,12 @@
+pytorch 1.10 以及图像深度学习基本的
+wandb     0.12.7
+tqdm      4.62.2
+tensorboardX     2.5
+
+scikit-learn      0.24.2
+graphviz             0.19.1  貌似得下载它要安装和配置环境变量
+hiddenlayer         0.3 这玩意好像得需要依赖graphviz
+grad-cam        1.3.6
+
+tqdm        4.62.2
+

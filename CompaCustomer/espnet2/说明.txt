@@ -1,0 +1,5 @@
+数据集dataset2（Tree）数据集划分改成了train+val:test 9:1  train :val :8:2   原图512*512
+对比试验之：unet
+训练时：
+256*256  batch size 4
+验证时 515*512 batch size 2
