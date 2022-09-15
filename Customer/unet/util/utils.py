@@ -8,6 +8,35 @@ from .dice_coefficient_loss import multiclass_dice_coeff, build_target
 import errno
 import torch.nn.functional as F
 import os
+from pathlib import Path
+import logging
+import os
+import time
+
+def getLogger(savedir):
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)  # Log等级总开关
+    formatter = logging.Formatter(fmt="[%(asctime)s|%(filename)s|%(levelname)s] %(message)s",
+                                  datefmt="%a %b %d %H:%M:%S %Y")
+    # StreamHandler
+    sHandler = logging.StreamHandler()
+    sHandler.setFormatter(formatter)
+    logger.addHandler(sHandler)
+    work_dir="./"
+
+    # FileHandler
+    Path(savedir).mkdir(parents=True, exist_ok=True)
+    work_dir = os.path.join(savedir,
+                            time.strftime("%Y-%m-%d-%H.%M", time.localtime()))  # 日志文件写入目录
+    if not os.path.exists(work_dir):
+        os.makedirs(work_dir)
+    fHandler = logging.FileHandler(work_dir + '/log.txt', mode='w',encoding="utf-8")
+    fHandler.setLevel(logging.DEBUG)  # 输出到file的log等级的开关
+    fHandler.setFormatter(formatter)  # 定义handler的输出格式
+    logger.addHandler(fHandler)  # 将logger添加到handler里面
+
+    return logger
+
 
 class SmoothedValue(object):
     """Track a series of values and provide access to smoothed values over a

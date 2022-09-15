@@ -10,6 +10,7 @@
 
 import argparse
 import logging
+from Customer.unet.util.utils import getLogger
 from pathlib import Path
 import torch
 import torch.nn as nn
@@ -18,8 +19,8 @@ from torch import optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from tensorboardX import SummaryWriter
-
-from  .evaluate_train import evaluateloss,evalue_iou_miou_Dice,computDiceloss
+"最新版本"
+from  Customer.unet.evaluate_train import evaluateloss,evalue_iou_miou_Dice,computDiceloss
 import  time
 from  nets.unet.unet_model import UNet,weights_init
 import numpy  as np
@@ -38,7 +39,19 @@ torch.cuda.manual_seed(seed) # 为当前GPU设置随机种子
 # 加了tensorboard记录
 dir_checkpoint = Path('./checkpoints/')
 tensorboarddir= Path('./TensorboardLog/')
+logsavedir = Path('./logs/')
 
+
+
+
+
+def  criterion(inputs, target, loss_weight=None, num_classes: int = 2, dice: bool = True, ignore_index: int = -100):
+    total_loss =0.0
+    total_loss = nn.functional.cross_entropy(inputs, target, ignore_index=ignore_index, weight=loss_weight)
+    if dice is True:
+        total_loss+= computDiceloss(inputs, target, num_classes, ignore_index)
+
+    return  total_loss
 
 ##cityscpes 我直接改成20类了19类原来的+1类背景（原来255位置的）
 def train_net(net,
@@ -103,7 +116,8 @@ def train_net(net,
     scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,T_0=5,T_mult=2,eta_min=1e-6)
     # we = np.array([0.69, 1.34, 2.5, 2.31, 0.5, 0.84, 2.17, 0.87, 0.83, 1.45, 0.85, 2.38, 1.73], np.float32)
     # we = torch.from_numpy(we).to(device)
-    criterion = nn.CrossEntropyLoss(ignore_index=ignoreindex)
+
+
     start_epoch = 1
     #是否有预训练
     if isPretrain:
@@ -143,7 +157,11 @@ def train_net(net,
     time1 = time.time()
     start = time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time1))
     print("训练{}个epoch的开始时间为:{}".format(epochs,start))
+    logger = getLogger(logsavedir)
+    logger.info("训练{}个epoch的开始时间为:{}".format(epochs,start))
+
     for epoch in range(start_epoch, epochs + 1):
+        logger.info("train|epoch:{epoch}\t".format(epoch=epoch))
         current_miou = 0.0
         total_train_loss = 0
         net.train()
@@ -161,11 +179,11 @@ def train_net(net,
                 out = net(images)
                 loss = 0.0
                 if useDice:
-                    diceloss = computDiceloss(out,true_masks,num_class,ignoreindex)
-                    loss=diceloss +criterion(out, true_masks)
-                else:
-                    loss = criterion(out, true_masks)
+                    loss = criterion(out, true_masks, loss_weight=None,  num_classes=num_class, dice= True, ignore_index = ignoreindex)
 
+                else:
+                    loss = criterion(out, true_masks, loss_weight=None, num_classes=num_class, dice=False,
+                              ignore_index=ignoreindex)
 
                 '''1.loss 2.梯度清零，3.反向传播。backward 4optomizer更新.'''
 
@@ -187,43 +205,62 @@ def train_net(net,
         if isevalue == True:
 
             if useDice:
-                acc_global, acc, iu, miou ,Dice= evalue_iou_miou_Dice(net, val_loader, device, num_class,isResize=imgshape_base,isDice=useDice )
+                # acc_global, acc, iu, miou ,Dice= evalue_iou_miou_Dice(net, val_loader, device, num_class,isResize=imgshape_base,isDice=True )
+                Yuan,Dice= evalue_iou_miou_Dice(net, val_loader, device, num_class,isResize=imgshape_base,isDice=True )
+                acc_global, acc, iu, miou = Yuan
+                print("我看看")
                 val_score = miou  #这个看情况 有时候用dice
-                val_loss,diceloss = evaluateloss(net, val_loader, device, numclass=num_class, ignoreindex=ignoreindex,isresize=imgshape_base,Diceloss=useDice)
-                logging.info('Validation loss : {}'.format(val_loss))
-                logging.info('Validation acc_global score: {}'.format(acc_global))
-                logging.info('Validation acc score: {}'.format(acc))
-                logging.info('Validation iu score: {}'.format(iu))
-                logging.info('Validation miou score: {}'.format(val_score)),
-                logging.info('Validation Dice score: {}'.format(Dice))
-                logging.info('本次训练时长: {} Seconds'.format(one_epoch_time))
+                val_loss,diceloss = evaluateloss(net, val_loader, device, numclass=num_class, ignoreindex=ignoreindex,isresize=imgshape_base,Diceloss=True)
+                # logging.info('Validation loss : {}'.format(val_loss))
+                # logging.info('Validation acc_global score: {}'.format(acc_global))
+                # logging.info('Validation acc score: {}'.format(acc))
+                # logging.info('Validation iu score: {}'.format(iu))
+                # logging.info('Validation miou score: {}'.format(val_score)),
+                # logging.info('Validation Dice score: {}'.format(Dice))
+                # logging.info('本次训练时长: {} Seconds'.format(one_epoch_time))
 
-                current_miou = val_score
+                logger.info('Validation loss : {}'.format(val_loss))
+                logger.info('Validation Dice loss : {}'.format(diceloss))
+                logger.info('Validation acc_global score: {}'.format(acc_global))
+                logger.info('Validation acc score: {}'.format(acc))
+                logger.info('Validation iu score: {}'.format(iu))
+                logger.info('Validation miou score: {}'.format(val_score)),
+                logger.info('Validation Dice score: {}'.format(Dice))
+                logger.info('本次训练时长: {} Seconds'.format(one_epoch_time))
+
                 epochs_score.append(val_score)
+
+                # tensorboard 记录
+                writer.add_scalar("train_total_loss", total_train_loss /( iteration + 1), epoch)
+                writer.add_scalar("valloss", val_loss, epoch)
+                writer.add_scalar("valmiou", val_score, epoch)
+                writer.add_scalar("valDice", Dice, epoch)
+                writer.add_scalar('best_epoch_index', epochs_score.index(max(epochs_score)) + 1, epoch)
             else:
                 acc_global, acc, iu, miou = evalue_iou_miou_Dice(net, val_loader, device, num_class,
                                                                        isResize=imgshape_base)
                 val_score = miou  #
                 val_loss = evaluateloss(net, val_loader, device, numclass=num_class, ignoreindex=ignoreindex,
                                                   isresize=imgshape_base)
-                logging.info('Validation loss : {}'.format(val_loss))
-                logging.info('Validation acc_global score: {}'.format(acc_global))
-                logging.info('Validation acc score: {}'.format(acc))
-                logging.info('Validation iu score: {}'.format(iu))
-                logging.info('Validation miou score: {}'.format(val_score)),
-                logging.info('本次训练时长: {} Seconds'.format(one_epoch_time))
+                logger.info('Validation loss : {}'.format(val_loss))
+                logger.info('Validation acc_global score: {}'.format(acc_global))
+                logger.info('Validation acc score: {}'.format(acc))
+                logger.info('Validation iu score: {}'.format(iu))
+                logger.info('Validation miou score: {}'.format(val_score)),
+                logger.info('本次训练时长: {} Seconds'.format(one_epoch_time))
 
                 current_miou = val_score
                 epochs_score.append(val_score)
 
+                # tensorboard 记录
+                writer.add_scalar("train_total_loss", total_train_loss / (iteration + 1), epoch)
+                writer.add_scalar("valloss", val_loss, epoch)
+                writer.add_scalar("valmiou", val_score, epoch)
+                writer.add_scalar('best_epoch_index', epochs_score.index(max(epochs_score)) + 1, epoch)
+
         print('Finish Validation')
         scheduler.step()  # 这个地方是按照迭代来调整学习率的
 
-        # tensorboard 记录
-        writer.add_scalar("train_total_loss", total_train_loss / iteration + 1, epoch)
-        writer.add_scalar("valloss", val_loss, epoch)
-        writer.add_scalar("valmiou", val_score, epoch)
-        writer.add_scalar('best_epoch_index', epochs_score.index(max(epochs_score)) + 1,epoch)
         # 保存最好的miou和最新的
         if save_checkpoint:
             Path(dir_checkpoint).mkdir(parents=True, exist_ok=True)
@@ -242,15 +279,16 @@ def train_net(net,
     time2 = time.time()
     end = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time2))
     print("训练{}个epoch的结束时间为:{}".format(epochs, end))
+    logger.info("训练{}个epoch的结束时间为:{}".format(epochs, end))
     writer.close()
-    logging.info("训练完成")
+    logger.info("训练完成")
 
 
 def get_args():
     parser = argparse.ArgumentParser(description='Train the UNet on images and target masks')
     parser.add_argument('--epochs', '-e', metavar='E', type=int, default=200, help='Number of epochs')
-    parser.add_argument('--train_batch-size', '-tb', dest='train_batch_size', metavar='TB', type=int, default=8, help='Train_Batch size')
-    parser.add_argument('--val_batch-size', '-vb', dest='val_batch_size', metavar='VB', type=int, default=8, help='Val_Batch size')
+    parser.add_argument('--train_batch-size', '-tb', dest='train_batch_size', metavar='TB', type=int, default=2, help='Train_Batch size')
+    parser.add_argument('--val_batch-size', '-vb', dest='val_batch_size', metavar='VB', type=int, default=2, help='Val_Batch size')
     parser.add_argument('--learning-rate', '-l', metavar='LR', type=float, default=1e-3,
                         help='Learning rate', dest='lr')
     parser.add_argument('--load', '-f', type=str, default="", help='Load model from a .pth file')  # 有没有预训练。。
@@ -258,7 +296,7 @@ def get_args():
                         help='ignore index defult 100')  # 有没有预训练。。
     parser.add_argument('--bilinear', action='store_true', default=False, help='Use bilinear upsampling')
     parser.add_argument('--resume', '-r', type=str, default=False, help='is use Resume')
-    parser.add_argument('--useDice', '-r', type=str, default=False, help='is use Dice')
+    parser.add_argument('--useDice', '-d', type=str, default=True, help='is use Dice')
     parser.add_argument('--classes', '-c', type=int, default=2, help='Number of classes')
 
     return parser.parse_args()
@@ -268,6 +306,7 @@ if __name__ == '__main__':
     args = get_args()
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # device = torch.device('cpu')
     logging.info(f'Using device {device}')
 
     net = UNet( n_channels=3,n_classes= args.classes)

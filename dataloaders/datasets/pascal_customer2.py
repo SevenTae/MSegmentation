@@ -103,7 +103,7 @@ class Customer_VOCSegmentation(Dataset):
     def transform_tr(self, sample):
         composed_transforms = transforms.Compose([
             tr.Resize(self.args.resize),  # 先缩放要不然原图太大了进不去
-
+            # tr.Normalize(mean=(0.231, 0.217, 0.22), std=(0.104, 0.086, 0.085)),  # 针对whdld数据集的
             tr.Normalize_simple(),
             tr.ToTensor()])
 
@@ -119,6 +119,7 @@ class Customer_VOCSegmentation(Dataset):
             tr.Enhance_Color(),#随机色度增强
             # tr.Enhance_contrasted(),#随机对比度增强
             # tr.Enhance_sharped(),#随机锐度增强
+            # tr.Normalize(mean=(0.231, 0.217, 0.22), std=(0.104, 0.086, 0.085)),  # 针对whdld数据集的
             tr.Normalize_simple(),
 
             tr.ToTensor()])

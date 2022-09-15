@@ -7,14 +7,12 @@ from train_utils.trainModule.unet.util.dice_coefficient_loss import dice_loss, b
 '''训练过程的验证以及测试'''
 
 
-#训练过程中验证集的loss
 def computDiceloss(inputs, target, num_classes, ignore_index):
     diceloss = 0
-    for name, x in inputs.items():
-        # 忽略target中值为255的像素，255的像素是目标边缘或者padding填充
-        dice_target = build_target(target, num_classes, ignore_index)
-        diceloss += dice_loss(x, dice_target, multiclass=True, ignore_index=ignore_index)
-    return dice_loss
+    dice_target = build_target(target, num_classes, ignore_index)
+    diceloss += dice_loss(inputs, dice_target, multiclass=True, ignore_index=ignore_index)
+    return diceloss
+
 
 
 
