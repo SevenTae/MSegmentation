@@ -10,7 +10,7 @@ class Path(object):
         elif dataset == 'coco':
             return '/path/to/datasets/coco/'
         elif  dataset=='pascal_customer':
-             return  'D:/Yan/MyExperiment/new/MSegmentation/datasets/VOCdevkit/VOC2012/'
+             return  '/home/qiqq/q3dl/datasets/pvTest/VOCdevkit/VOC2012/'
         elif dataset=='Customer':
             return 'D:/MSegmentation/data/Customer/'
         else:

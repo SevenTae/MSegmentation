@@ -18,7 +18,6 @@ def calculate_weigths_labels( dataloader, num_classes):
         y = y.detach().cpu().numpy()
 
         y=y-1 #这个地方是有时候标签可能从1开始
-
         # y=y-1 #这个地方是有时候标签可能从1开始
 
         mask = (y >= 0) & (y < num_classes)
