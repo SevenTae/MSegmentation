@@ -56,7 +56,7 @@ def evalue_iou_miou_Dice(model, data_loader, device, num_classes,isResize=None,i
                 output = model(image)
                 dice.update(output, target)
 
-        return confmat.re_zhib() ,dice.value.item() #返回confmat.re_zhib()acc_global, acc, iu,miou,
+        return confmat.re_zhib() ,dice.value.item() #返回confmat.re_zhib()acc_global, acc, iu, precion, recall, f1
     return confmat.re_zhib()
 
 

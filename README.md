@@ -23,6 +23,10 @@ evaluate_module 存放的测评指标（iou, miou ..）的方法 来源于霹雳
    其中训练日志支持wandb和tensorboard<br>
    4.小功能:模型参数和计算复杂度的计算，统计数据集的均值和方差，统计分割中各类别像素出现的频率以及形成类别权重
    5.分割的标签如果是单通道灰度图的化，支持单通道彩色化，onnx(感觉没用)<br>
-   6.支持多种评价指标:iou ,miou,oa,准确率，召回率，dice系数，f1-score(后四个还没开始)<br>
-   7.可视化,gradcam(有 但是不好用 正准备完善),hiddenlayer可视化网络结构（废了这个需要的依赖挺麻烦的）<br>
-   8.支持半监督训练方式（准备拓展）
+   6.支持多种评价指标:iou ,miou,oa,准确率，召回率，dice系数，f1-score<br>
+   7.可视化,gradcam(能用但是不明白原理),hiddenlayer可视化网络结构（废了这个需要的依赖挺麻烦的）<br>
+ 
+ 
+<br>
+注意:所有新增的有关训练验证和测试的功能,比如新增了一些评价指标什么的 都在train.utils 下的trainModule下的unet下的utils设置<br>
+实际的训练实例可以按照trainModule下的unet来自主设置

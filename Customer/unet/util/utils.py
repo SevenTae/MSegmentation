@@ -8,10 +8,10 @@ from .dice_coefficient_loss import multiclass_dice_coeff, build_target
 import errno
 import torch.nn.functional as F
 import os
-from pathlib import Path
+
 import logging
-import os
-import time
+from pathlib import Path
+
 
 def getLogger(savedir):
     logger = logging.getLogger()
@@ -36,7 +36,6 @@ def getLogger(savedir):
     logger.addHandler(fHandler)  # 将logger添加到handler里面
 
     return logger
-
 
 class SmoothedValue(object):
     """Track a series of values and provide access to smoothed values over a
@@ -121,6 +120,21 @@ class ConfusionMatrix(object):
             self.mat.zero_()
 
     def compute(self):
+        # 注意混淆矩阵的形式
+        # 注意这个混淆矩阵都不太统一 有的是1的样子 有的是2的样子 本计算 借鉴的霹雳大佬的代码采用2的形式
+        '''1.
+              预测
+        真实
+
+        '''
+
+        '''2.
+               真实
+        预测
+        '''
+        #
+        # #0.sum代表所有行之间取sum 保留列的结构  1.sum代表所有列之间取sum保留行的结构
+
         h = self.mat.float()
         # 计算全局预测准确率(混淆矩阵的对角线为预测正确的个数)
         acc_global = torch.diag(h).sum() / h.sum()
@@ -128,7 +142,17 @@ class ConfusionMatrix(object):
         acc = torch.diag(h) / h.sum(1)
         # 计算每个类别预测与真实目标的iou
         iu = torch.diag(h) / (h.sum(1) + h.sum(0) - torch.diag(h))
-        return acc_global, acc, iu
+        '''
+          22/9/24补充：每一类的准确率（p）同上边的acc和召回率r
+          p=tp/tp+fp  对角线/h.sum(1)
+          召回=tp/tp+fn  对角线/h.sum(0)
+          f1=2 (p*r)/p+r   
+        '''
+        precion = torch.diag(h) / h.sum(1)
+        recall = torch.diag(h) / h.sum(0)
+        f1 = (2 * precion * recall) / (precion + recall)
+
+        return acc_global, acc, iu,precion,recall,f1
 
     # def reduce_from_all_processes(self):
     #     if not torch.distributed.is_available():
@@ -139,24 +163,38 @@ class ConfusionMatrix(object):
     #     torch.distributed.all_reduce(self.mat)
 
     def re_zhib(self):
-        acc_global, acc, iu = self.compute()
+        acc_global, acc, iu,precion,recall,f1 = self.compute()
         miou = iu.mean().item() * 100
         acc_global = acc_global.item() * 100
         acc = [round(i, 1) for i in (acc * 100).tolist()]
         iu = [round(i, 1) for i in (iu * 100).tolist()]
 
-        return acc_global, acc, iu, miou
+        precion = [round(i, 1) for i in (precion * 100).tolist()]
+        recall = [round(i, 1) for i in (recall * 100).tolist()]
+        f1 = [round(i, 1) for i in (f1 * 100).tolist()]
+
+        return  acc_global, acc, iu,precion,recall,f1,miou
 
     def __str__(self):
-        acc_global, acc, iu = self.compute()
+        acc_global, acc, iu, precion, recall, f1 = self.compute()
         return (
             'global correct: {:.1f}\n'
             'average row correct: {}\n'
             'IoU: {}\n'
-            'mean IoU: {:.1f}').format(
+            'Precion: {:.1f}\n'
+            'Recall: {:.1f}\n'
+            'f1: {:.1f}\n'
+            'mean IoU: {:.1f}\n'
+
+
+        ).format(
                 acc_global.item() * 100,
                 ['{:.1f}'.format(i) for i in (acc * 100).tolist()],
                 ['{:.1f}'.format(i) for i in (iu * 100).tolist()],
+                ['{:.1f}'.format(i) for i in (precion * 100).tolist()],
+                ['{:.1f}'.format(i) for i in (recall * 100).tolist()],
+                ['{:.1f}'.format(i) for i in (f1 * 100).tolist()],
+
                 iu.mean().item() * 100)
 
 class MetricLogger(object):

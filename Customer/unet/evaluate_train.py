@@ -78,7 +78,7 @@ def evaluateloss(net, dataloader, device,numclass=20, ignoreindex=100,isresize=N
 
 
 
-import train_utils.utils as  utils
+import train_utils.trainModule.unet.util.utils as  utils
 
 
 def evalue_iou_miou_Dice(model, data_loader, device, num_classes,isResize=None,isDice =False,ignore_index =255):
@@ -178,7 +178,7 @@ def evalue_Fwiou(model, data_loader, device, num_classes,isResize=None,ignore_in
                 output = torch.softmax(output, dim=1)  # b，dm h w
                 output = output.argmax(1)
             confmat.update(target.flatten(), output.flatten())
-        _, _, iu=confmat.compute()
+        acc_global, acc, iu, precion, recall, f1 = confmat.compute()
         fwiou =[]
         for  i in range(len(iu)):
             wiou= iu[i]*class_frequency[i]

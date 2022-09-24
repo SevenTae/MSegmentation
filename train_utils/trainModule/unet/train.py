@@ -10,7 +10,7 @@
 
 import argparse
 import logging
-from Customer.unet.util.utils import getLogger
+from .util.utils import getLogger
 from pathlib import Path
 import torch
 import torch.nn as nn
@@ -19,8 +19,8 @@ from torch import optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from tensorboardX import SummaryWriter
-"最新版本"
-from  Customer.unet.evaluate_train import evaluateloss,evalue_iou_miou_Dice,computDiceloss
+
+from  .evaluate_train import evaluateloss,evalue_iou_miou_Dice,computDiceloss,evalue_Fwiou
 import  time
 from  nets.unet.unet_model import UNet,weights_init
 import numpy  as np
@@ -207,7 +207,9 @@ def train_net(net,
             if useDice:
                 # acc_global, acc, iu, miou ,Dice= evalue_iou_miou_Dice(net, val_loader, device, num_class,isResize=imgshape_base,isDice=True )
                 Yuan,Dice= evalue_iou_miou_Dice(net, val_loader, device, num_class,isResize=imgshape_base,isDice=True )
-                acc_global, acc, iu, miou = Yuan
+                fwiou= evalue_Fwiou(net, val_loader, device, num_class,isResize=imgshape_base)
+
+                acc_global, acc, iu, precion, recall, f1, miou = Yuan
                 print("我看看")
                 val_score = miou  #这个看情况 有时候用dice
                 val_loss,diceloss = evaluateloss(net, val_loader, device, numclass=num_class, ignoreindex=ignoreindex,isresize=imgshape_base,Diceloss=True)
@@ -224,29 +226,48 @@ def train_net(net,
                 logger.info('Validation acc_global score: {}'.format(acc_global))
                 logger.info('Validation acc score: {}'.format(acc))
                 logger.info('Validation iu score: {}'.format(iu))
-                logger.info('Validation miou score: {}'.format(val_score)),
+
+                logger.info('Validation precion score: {}'.format(precion))
+                logger.info('Validation recall score: {}'.format(recall))
+                logger.info('Validation f1 score: {}'.format(f1))
+
+                logger.info('Validation miou score: {}'.format(val_score))
+                logger.info('Validation fwiou score: {}'.format(fwiou))
+
                 logger.info('Validation Dice score: {}'.format(Dice))
                 logger.info('本次训练时长: {} Seconds'.format(one_epoch_time))
 
                 epochs_score.append(val_score)
 
                 # tensorboard 记录
+                #注意目前暂且iu f1这种单别数组的形式还进不了tensorboard
                 writer.add_scalar("train_total_loss", total_train_loss /( iteration + 1), epoch)
                 writer.add_scalar("valloss", val_loss, epoch)
                 writer.add_scalar("valmiou", val_score, epoch)
+                writer.add_scalar("valfmiou", fwiou, epoch)
+
                 writer.add_scalar("valDice", Dice, epoch)
                 writer.add_scalar('best_epoch_index', epochs_score.index(max(epochs_score)) + 1, epoch)
             else:
-                acc_global, acc, iu, miou = evalue_iou_miou_Dice(net, val_loader, device, num_class,
+                acc_global, acc, iu, precion, recall, f1, miou = evalue_iou_miou_Dice(net, val_loader, device, num_class,
                                                                        isResize=imgshape_base)
                 val_score = miou  #
+                fwiou = evalue_Fwiou(net, val_loader, device, num_class, isResize=imgshape_base)
+
                 val_loss = evaluateloss(net, val_loader, device, numclass=num_class, ignoreindex=ignoreindex,
                                                   isresize=imgshape_base)
                 logger.info('Validation loss : {}'.format(val_loss))
                 logger.info('Validation acc_global score: {}'.format(acc_global))
                 logger.info('Validation acc score: {}'.format(acc))
                 logger.info('Validation iu score: {}'.format(iu))
-                logger.info('Validation miou score: {}'.format(val_score)),
+                logger.info('Validation fwiou score: {}'.format(fwiou))
+
+
+                logger.info('Validation precion score: {}'.format(precion))
+                logger.info('Validation recall score: {}'.format(recall))
+                logger.info('Validation f1 score: {}'.format(f1))
+                logger.info('Validation miou score: {}'.format(val_score))
+
                 logger.info('本次训练时长: {} Seconds'.format(one_epoch_time))
 
                 current_miou = val_score
@@ -256,6 +277,8 @@ def train_net(net,
                 writer.add_scalar("train_total_loss", total_train_loss / (iteration + 1), epoch)
                 writer.add_scalar("valloss", val_loss, epoch)
                 writer.add_scalar("valmiou", val_score, epoch)
+                writer.add_scalar("valfmiou", fwiou, epoch)
+
                 writer.add_scalar('best_epoch_index', epochs_score.index(max(epochs_score)) + 1, epoch)
 
         print('Finish Validation')

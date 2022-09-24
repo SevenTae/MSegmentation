@@ -4,7 +4,7 @@ from tqdm import tqdm
 from torch import nn
 from train_utils.trainModule.unet.util.dice_coefficient_loss import dice_loss, build_target
 import  numpy as  np
-'''训练过程的验证以及测试'''
+'''训练过程的验证'''
 
 
 def computDiceloss(inputs, target, num_classes, ignore_index):
@@ -78,7 +78,7 @@ def evaluateloss(net, dataloader, device,numclass=20, ignoreindex=100,isresize=N
 
 
 
-import train_utils.utils as  utils
+import train_utils.trainModule.unet.util.utils as  utils
 
 
 def evalue_iou_miou_Dice(model, data_loader, device, num_classes,isResize=None,isDice =False,ignore_index =255):
@@ -119,7 +119,7 @@ def evalue_iou_miou_Dice(model, data_loader, device, num_classes,isResize=None,i
                 output = model(image)
                 dice.update(output, target)
 
-        return confmat.re_zhib() ,dice.value.item() #返回confmat.re_zhib()acc_global, acc, iu,miou,
+        return confmat.re_zhib() ,dice.value.item() #返回confmat.re_zhib()  (acc_global, acc, iu,precion,recall,f1)
     return confmat.re_zhib()
 
 
@@ -179,7 +179,7 @@ def evalue_Fwiou(model, data_loader, device, num_classes,isResize=None,ignore_in
                 output = torch.softmax(output, dim=1)  # b，dm h w
                 output = output.argmax(1)
             confmat.update(target.flatten(), output.flatten())
-        _, _, iu=confmat.compute()
+        acc_global, acc, iu, precion, recall, f1=confmat.compute()
         fwiou =[]
         for  i in range(len(iu)):
             wiou= iu[i]*class_frequency[i]
