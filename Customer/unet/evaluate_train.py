@@ -183,6 +183,6 @@ def evalue_Fwiou(model, data_loader, device, num_classes,isResize=None,ignore_in
         for  i in range(len(iu)):
             wiou= iu[i]*class_frequency[i]
             fwiou.append(wiou)
-        fwiou=sum(fwiou)/len(fwiou)*100
+        fwiou=sum(fwiou)*100
         print("FWiou结束")
         return fwiou

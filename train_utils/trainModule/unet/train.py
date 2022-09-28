@@ -20,12 +20,12 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from tensorboardX import SummaryWriter
 
-from  .evaluate_train import evaluateloss,evalue_iou_miou_Dice,computDiceloss,evalue_Fwiou
+from  .evaluate_train import evaluateloss,evalue_iou_miou_Dice,computDiceloss,evalue_Fwiou,calculate_frequency_labels
 import  time
 from  nets.unet.unet_model import UNet,weights_init
 import numpy  as np
 "由于服务器用不了wandb所以这里删除了用wandb记录的代码"
-
+import  os
 import  numpy as np
 import  random
 import torch
@@ -65,7 +65,8 @@ def train_net(net,
               save_checkpoint: bool = True,
               ignoreindex: int = 100,
               num_class = 21,
-              useDice=False
+              useDice=False,
+              fwiou =None
 
               ):
     # 1. Create dataset
@@ -84,6 +85,11 @@ def train_net(net,
     train_d = pascal_customer2.Customer_VOCSegmentation(argstrain, split='train',isAug=False)
     val_d = pascal_customer2.Customer_VOCSegmentation(argsval, split='val',)
 
+    print("计算fwiou的每一类出现的概率")
+    fwiou_label_weight = calculate_frequency_labels(val_d, num_classes=num_class, ignor_index=ignoreindex)
+
+
+
     n_val = val_d.__len__()
     n_train = train_d.__len__()
 
@@ -92,8 +98,18 @@ def train_net(net,
 
 
     # 初始化tensorboard
-    Path(tensorboarddir).mkdir(parents=True, exist_ok=True)
-    writer = SummaryWriter(tensorboarddir)
+    # Path(tensorboarddir).mkdir(parents=True, exist_ok=True)
+    workTensorboard_dir = os.path.join(dir_checkpoint,
+                                       time.strftime("%Y-%m-%d-%H.%M", time.localtime()))  # 日志文件写入目录
+    if not os.path.exists(workTensorboard_dir):
+        os.makedirs(workTensorboard_dir)
+
+    workcheckpoint_dir = os.path.join(dir_checkpoint,
+                                      time.strftime("%Y-%m-%d-%H.%M", time.localtime()))  # 日志文件写入目录
+    if not os.path.exists(workcheckpoint_dir):
+        os.makedirs(workcheckpoint_dir)
+
+    writer = SummaryWriter(workTensorboard_dir)
 
     logging.info(f'''Starting training:
         Epochs:          {epochs}
@@ -203,11 +219,12 @@ def train_net(net,
         # Evaluation round  #每个epoch评估一次
         isevalue = True
         if isevalue == True:
+            current_lr= optimizer.param_groups[0]['lr']
 
             if useDice:
                 # acc_global, acc, iu, miou ,Dice= evalue_iou_miou_Dice(net, val_loader, device, num_class,isResize=imgshape_base,isDice=True )
                 Yuan,Dice= evalue_iou_miou_Dice(net, val_loader, device, num_class,isResize=imgshape_base,isDice=True )
-                fwiou= evalue_Fwiou(net, val_loader, device, num_class,isResize=imgshape_base)
+                fwiou= evalue_Fwiou(net, val_loader, device, num_class,weight= fwiou_label_weight,isResize=imgshape_base)
 
                 acc_global, acc, iu, precion, recall, f1, miou = Yuan
                 print("我看看")
@@ -242,6 +259,8 @@ def train_net(net,
                 # tensorboard 记录
                 #注意目前暂且iu f1这种单别数组的形式还进不了tensorboard
                 writer.add_scalar("train_total_loss", total_train_loss /( iteration + 1), epoch)
+                writer.add_scalar("lr", current_lr, epoch)
+
                 writer.add_scalar("valloss", val_loss, epoch)
                 writer.add_scalar("valmiou", val_score, epoch)
                 writer.add_scalar("valfmiou", fwiou, epoch)
@@ -275,6 +294,8 @@ def train_net(net,
 
                 # tensorboard 记录
                 writer.add_scalar("train_total_loss", total_train_loss / (iteration + 1), epoch)
+                writer.add_scalar("lr", current_lr, epoch)
+
                 writer.add_scalar("valloss", val_loss, epoch)
                 writer.add_scalar("valmiou", val_score, epoch)
                 writer.add_scalar("valfmiou", fwiou, epoch)
@@ -286,18 +307,19 @@ def train_net(net,
 
         # 保存最好的miou和最新的
         if save_checkpoint:
-            Path(dir_checkpoint).mkdir(parents=True, exist_ok=True)
+
+            # Path(dir_checkpoint).mkdir(parents=True, exist_ok=True)
             checkpoint = {
                 "net": net.state_dict(),
                 'optimizer': optimizer.state_dict(),
                 "epoch": epoch,
                 'lr_schedule': scheduler.state_dict()
             }
-            torch.save(checkpoint, str(dir_checkpoint / 'last.pth'))  # 保存最新的
+            torch.save(checkpoint, os.path.join(workcheckpoint_dir, 'last.pth'))  # 保存最新的
             # 保存最好的
             if current_miou >= best_miou:
                 best_miou = current_miou
-                torch.save(checkpoint, str(dir_checkpoint / 'best.pth'.format(best_miou)))
+                torch.save(checkpoint, os.path.join(workcheckpoint_dir, 'best.pth'))
 
     time2 = time.time()
     end = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time2))

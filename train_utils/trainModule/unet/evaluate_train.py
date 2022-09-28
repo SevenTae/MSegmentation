@@ -153,11 +153,11 @@ def calculate_frequency_labels( dataloader, num_classes,ignor_index=255):
 
 
 
-def evalue_Fwiou(model, data_loader, device, num_classes,isResize=None,ignore_index =255):
+def evalue_Fwiou(model, data_loader, device, num_classes,weight,isResize=None,ignore_index =255):
     #我的计算方法：先算出整个测试集的类别概率，在计算整个测试集的iou 然后计算fwiou
     # 计算Fwiou
-    print("计算每一类出现的频率")
-    class_frequency = calculate_frequency_labels(data_loader,num_classes,ignore_index)
+
+    class_frequency = weight
     model.eval()
     confmat = utils.ConfusionMatrix(num_classes)
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -185,6 +185,6 @@ def evalue_Fwiou(model, data_loader, device, num_classes,isResize=None,ignore_in
             wiou= iu[i]*class_frequency[i]
             fwiou.append(wiou)
 
-        fwiou = sum(fwiou) / len(fwiou) * 100
+        fwiou = sum(fwiou) * 100
         print("FWiou结束")
         return fwiou

@@ -3,5 +3,5 @@
   <component name="JavaScriptSettings">
     <option name="languageLevel" value="ES6" />
   </component>
-  <component name="ProjectRootManager" version="2" project-jdk-name="Remote Python 3.8.13 (sftp://qiqq@172.18.16.227:22121/home/qiqq/miniconda3/envs/Q3pytorch/bin/python3.8)" project-jdk-type="Python SDK" />
+  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.6 (pytorch-gpu) (24)" project-jdk-type="Python SDK" />
 </project>

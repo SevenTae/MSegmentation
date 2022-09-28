@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import  numpy as np
 import  random
 import torch
-from  .evaluate_train import evaluateloss,evalue_iou_miou_Dice,computDiceloss
+from  train_utils.trainModule.unet.evaluate_train import evaluateloss,evalue_iou_miou_Dice,computDiceloss
 import  time
 from tqdm import  tqdm
 seed = 7
@@ -12,10 +12,10 @@ random.seed(seed)
 np.random.seed(seed)
 torch.manual_seed(seed) # 为CPU设置随机种子
 torch.cuda.manual_seed(seed) # 为当前GPU设置随机种子
-
-from .util import utils
-from .util.dice_coefficient_loss import  dice_loss, build_target
-
+import os
+from train_utils.trainModule.unet.util import utils
+from train_utils.trainModule.unet.util.dice_coefficient_loss import  dice_loss, build_target
+from pathlib import Path
 
 
 def evalue_iou_miou_Dice(model, data_loader, device, num_classes,isResize=None,isDice =False,ignore_index =255):
@@ -121,7 +121,7 @@ def evalue_Fwiou(model, data_loader, device, num_classes,isResize=None,ignore_in
         for  i in range(len(iu)):
             wiou= iu[i]*class_frequency[i]
             fwiou.append(wiou)
-        fwiou = sum(fwiou) / len(fwiou) * 100
+        fwiou = sum(fwiou)  * 100
         print("FWiou结束")
         return fwiou
 
@@ -166,13 +166,21 @@ if __name__ == '__main__':
     else:
         ev = evalue_iou_miou_Dice(model, test_loader, device, num_classes=13, isResize=imgbase)
 
-    # filename = "tree数据集各种结果"
-    #
-    # with open(r"F:\MSegmentation\Test_log2\{}.txt".format(filename), mode='a', encoding='utf-8') as f:
-    #     f.write("-------------------测试结果-------------------\n")
-    #     f.write("{}\n".format(ev))
-    # f.close()
-    # print("结果已经保存")
+
+
+    ######结果保存###############################
+
+    filename = "result.txt"
+    resultsavedir = Path('./result/')
+    work_dir = os.path.join(resultsavedir,
+                                       time.strftime("%Y-%m-%d-%H.%M", time.localtime()))  # 日志文件写入目录
+    if not os.path.exists(work_dir):
+        os.makedirs(work_dir)
+    with open("{}".format(os.path.join(work_dir,filename)), mode='a', encoding='utf-8') as f:
+        f.write("-------------------测试结果-------------------\n")
+        f.write("{}\n".format(ev))
+    f.close()
+    print("结果已经保存")
 
 
 
