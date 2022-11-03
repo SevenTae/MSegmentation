@@ -12,7 +12,7 @@ class Path(object):
         elif  dataset=='pascal_customer':
              return  '/home/qiqq/q3dl/datasets/pvTest/VOCdevkit/VOC2012/'
         elif dataset=='Customer':
-            return 'D:/MSegmentation/data/Customer/'
+            return r'D:\IMPORTANT DATA\DESKTOP\Image\Labelme\VOCdevkit\VOC2012'
         else:
             print('Dataset {} not available.'.format(dataset))
             raise NotImplementedError

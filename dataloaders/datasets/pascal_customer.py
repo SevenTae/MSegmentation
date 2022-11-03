@@ -3,23 +3,32 @@ import os
 from PIL import Image
 import numpy as np
 from torch.utils.data import Dataset
-
-from dataloaders.mypath import Path
-
-from dataloaders.mypath import Path  #注意一下这个path
-
+from dataloaders.mypath2 import Path  #注意一下这个path
 from torchvision import transforms
 from dataloaders import custom_transforms as tr
 '''voc数据集处理格式'''
+#一定要设置随机种子要不然每次结果都不一样
+import  numpy as np
+import  random
+import torch
+
+seed = 7
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed) # 为CPU设置随机种子
+torch.cuda.manual_seed(seed) # 为当前GPU设置随机种子
+
+
+'''pascal_customer2 是个老版本（以前的备份），一般用这个就行'''
 class Customer_VOCSegmentation(Dataset):
     """
     PascalVoc dataset
     """
-    NUM_CLASSES = 6
+
 
     def __init__(self,
                  args,
-                 base_dir=Path.db_root_dir('pascal_customer'),
+                 base_dir=Path.db_root_dir('Customer'),
                  split='train',
                  isAug =False
                  ):
@@ -33,6 +42,9 @@ class Customer_VOCSegmentation(Dataset):
         self._base_dir = base_dir
         self._image_dir = os.path.join(self._base_dir, 'JPEGImages')
         self._cat_dir = os.path.join(self._base_dir, 'SegmentationClass')
+        self.args = args
+        self.crop_size = args.crop_size   #是单数比如256，
+        self.flip_prob = args.flip_prob  #是0-1
 
         if isinstance(split, str):
             self.split = [split]
@@ -40,7 +52,6 @@ class Customer_VOCSegmentation(Dataset):
             split.sort()
             self.split = split
 
-        self.args = args
 
         _splits_dir = os.path.join(self._base_dir, 'ImageSets', 'Segmentation')
 
@@ -53,12 +64,8 @@ class Customer_VOCSegmentation(Dataset):
                 lines = f.read().splitlines()
 
             for ii, line in enumerate(lines):
-                _image = os.path.join(self._image_dir, line + ".jpg") #注意这个地方有的图片可能是jpg有的可能是png自己看着改
-
-                _cat = os.path.join(self._cat_dir, line + ".png")
-
+                _image = os.path.join(self._image_dir, line + ".jpeg") #注意这个地方有的图片可能是jpg有的可能是png自己看着改
                 _cat = os.path.join(self._cat_dir, line + ".png")  #注意格式
-
                 assert os.path.isfile(_image)
                 assert os.path.isfile(_cat)
                 self.im_ids.append(line)
@@ -100,43 +107,36 @@ class Customer_VOCSegmentation(Dataset):
     def transform_tr(self, sample):
         composed_transforms = transforms.Compose([
             tr.Resize(self.args.resize),  # 先缩放要不然原图太大了进不去
-
+            # tr.Normalize(mean=(0.231, 0.217, 0.22), std=(0.104, 0.086, 0.085)),  # 针对whdld数据集的
             tr.Normalize_simple(),
-
-            tr.Normalize(mean=(0.231, 0.217, 0.22), std=(0.104, 0.086, 0.085)),#针对whdld数据集的
-            # tr.Normalize_simple(),
-
             tr.ToTensor()])
 
         return composed_transforms(sample)
-
+    #
     def AugTrain(self, sample):
+        '''
+        这个版本的AugTrain使用的 Zhenchao Jin版本对numpy进行操作
+        :param sample:
+        :return:
+
+        随机裁剪，随机翻转，随机颜色增强，随机旋转这四个就够了以后别再浪费时间在这上边了
+        '''
         composed_transforms = transforms.Compose([
-            tr.Resize(self.args.resize),  # 先缩放要不然原图太大了进不去
-            # tr.RandomScaleCrop(base_size=self.args.base_size,crop_size=self.args.crop_size,fill=255),
-            # tr.RandomFixScaleCropMy(crop_size=self.args.crop_size, fill=255),
-            tr.RandomHorizontalFlip(),
-            tr.RandomGaussianBlur(),
+            tr.Tonumpy(),
+            tr.RandomCrop(crop_size=self.crop_size),
+            tr.RandomFlip(),
+            tr.PhotoMetricDistortion(),
+            tr.RandomRotation(),
 
+            tr.Resize2(self.args.resize,scale_range=None,keep_ratio=False),
             tr.Normalize_simple(),
-            # tr.Normalize(mean=(0.434, 0.502, 0.452), std=(0.168, 0.146, 0.182)),
-
-            # tr.Normalize_simple(),
-            tr.Normalize(mean=(0.231, 0.217, 0.22), std=(0.104, 0.086, 0.085)),  #ehdld数据集
-
             tr.ToTensor()])
         return composed_transforms(sample)
 
     def transform_val(self, sample):
         composed_transforms = transforms.Compose([
-
-            tr.Resize(self.args.resize),
-            tr.Normalize_simple(),
-            # tr.Normalize(mean=(0.434, 0.502, 0.452), std=(0.168, 0.146, 0.182)),
-
             tr.ResizeforValTest(self.args.resize),
-            # tr.Normalize_simple(),
-            tr.Normalize(mean=(0.231, 0.217, 0.22), std=(0.104, 0.086, 0.085)),
+            tr.Normalize_simple(),
 
             tr.ToTensor()])
         return composed_transforms(sample)
@@ -144,8 +144,12 @@ class Customer_VOCSegmentation(Dataset):
     def __str__(self):
         return 'VOC2012(split=' + str(self.split) + ')'
 
-
+#
 if __name__ == '__main__':
+    a  =np.random.randn(3,3)
+    # print(a)
+
+
     from dataloaders.utils import decode_segmap
     from torch.utils.data import DataLoader
     import matplotlib.pyplot as plt
@@ -153,11 +157,12 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     args = parser.parse_args()
-    args.base_size = 512
-    args.crop_size = 256
+
+    args.crop_size = 100
+    args.flip_prob=0.5
     args.resize=(256,256)
 
-    voc_train = Customer_VOCSegmentation(args, split='test',isAug=False)
+    voc_train = Customer_VOCSegmentation(args, split='train',isAug=True)
 
     dataloader = DataLoader(voc_train, batch_size=1, shuffle=False, num_workers=0)
 
@@ -165,8 +170,10 @@ if __name__ == '__main__':
         for jj in range(sample["image"].size()[0]):
             img = sample['image'].numpy()
             gt = sample['label'].numpy()
-            gt=gt-1
-            print(gt)
+
+            print("现在的尺寸：",img.shape)
+            # gt=gt-1
+            # print(gt)
             tmp = np.array(gt[jj]).astype(np.uint8)
             segmap = decode_segmap(tmp, dataset='pascal_customer')
             img_tmp = np.transpose(img[jj], axes=[1, 2, 0])

@@ -7,7 +7,7 @@
 @create_time    : 2022/9/13 22:57
 训练文件模板
 """
-from .util.index_manager import addLogger,addTensorboard
+
 import argparse
 import logging
 from .util.utils import getLogger
@@ -20,7 +20,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from tensorboardX import SummaryWriter
 
-from  .evaluate_train import Evalue,computDiceloss
+from  .evaluate_train import evaluateloss,evalue_iou_miou_Dice,computDiceloss,evalue_Fwiou,calculate_frequency_labels
 import  time
 from  nets.unet.unet_model import UNet,weights_init
 import numpy  as np
@@ -66,8 +66,7 @@ def train_net(net,
               ignoreindex: int = 100,
               num_class = 21,
               useDice=False,
-              valIndex=[],
-
+              useFWiou=False
 
               ):
     # 1. Create dataset
@@ -86,7 +85,8 @@ def train_net(net,
     train_d = pascal_customer2.Customer_VOCSegmentation(argstrain, split='train',isAug=False)
     val_d = pascal_customer2.Customer_VOCSegmentation(argsval, split='val',)
 
-
+    print("计算fwiou的每一类出现的概率")
+    fwiou_label_weight = calculate_frequency_labels(val_d, num_classes=num_class, ignor_index=ignoreindex)
 
 
 
@@ -99,7 +99,7 @@ def train_net(net,
 
     # 初始化tensorboard
     # Path(tensorboarddir).mkdir(parents=True, exist_ok=True)
-    workTensorboard_dir = os.path.join(tensorboarddir,
+    workTensorboard_dir = os.path.join(dir_checkpoint,
                                        time.strftime("%Y-%m-%d-%H.%M", time.localtime()))  # 日志文件写入目录
     if not os.path.exists(workTensorboard_dir):
         os.makedirs(workTensorboard_dir)
@@ -110,7 +110,6 @@ def train_net(net,
         os.makedirs(workcheckpoint_dir)
 
     writer = SummaryWriter(workTensorboard_dir)
-
 
     logging.info(f'''Starting training:
         Epochs:          {epochs}
@@ -177,9 +176,6 @@ def train_net(net,
     logger = getLogger(logsavedir)
     logger.info("训练{}个epoch的开始时间为:{}".format(epochs,start))
 
-    log = addLogger(logger)
-    tenb = addTensorboard(writer)
-
     for epoch in range(start_epoch, epochs + 1):
         logger.info("train|epoch:{epoch}\t".format(epoch=epoch))
         current_miou = 0.0
@@ -222,35 +218,82 @@ def train_net(net,
         print('start Validation')
         # Evaluation round  #每个epoch评估一次
         isevalue = True
-
         if isevalue == True:
-            val_score =0
-            current_lr= optimizer.param_groups[0]['lr'] #当前的学习率
-            evalueModel=Evalue(net,val_loader,device,num_class,isResize=imgshape_base,ignore_index=ignoreindex,weight=None)
-            for i in valIndex:
-                #这个地方其实是默认了只有IouMiouP可能会出现数组
-                if i =="IouMiouP":
-                    indextring = [ "acc_global", "acc", "iu","precion","recall","f1","miou"]
+            current_lr= optimizer.param_groups[0]['lr']
 
-                    result=eval('evalueModel.'+'evalue_'+i)()
-                    for i in range(len(indextring)):
-                        log.logger_index(result[i],indextring[i])
-                        if indextring[i] == "acc_global" or indextring[i] == "miou":
-                            if indextring[i] == "miou":
-                                epochs_score.append(val_score)
-                            tenb.writer_singleindex(indextring[i],index=result[i],epoch=epoch)
-                            tenb.writer_singleindex("best_epoch_index",index=result[i],epoch=epoch)
-                        else:
-                            tenb.writer_classindex(indextring[i],classindexs=result[i],epoch=epoch)
+            if useDice:
+                # acc_global, acc, iu, miou ,Dice= evalue_iou_miou_Dice(net, val_loader, device, num_class,isResize=imgshape_base,isDice=True )
+                Yuan,Dice= evalue_iou_miou_Dice(net, val_loader, device, num_class,isResize=imgshape_base,isDice=True )
+                fwiou= evalue_Fwiou(net, val_loader, device, num_class,weight= fwiou_label_weight,isResize=imgshape_base)
 
-                else:
-                    result = eval('evalueModel.' + 'evalue_' + i)()
+                acc_global, acc, iu, precion, recall, f1, miou = Yuan
+                print("我看看")
+                val_score = miou  #这个看情况 有时候用dice
+                val_loss,diceloss = evaluateloss(net, val_loader, device, numclass=num_class, ignoreindex=ignoreindex,isresize=imgshape_base,Diceloss=True)
 
-                    log.logger_index(result, valIndex[i])
-                    tenb.writer_singleindex(valIndex[i], index=result, epoch=epoch)
+                logger.info('Validation loss : {}'.format(val_loss))
+                logger.info('Validation Dice loss : {}'.format(diceloss))
+                logger.info('Validation acc_global score: {}'.format(acc_global))
+                logger.info('Validation acc score: {}'.format(acc))
+                logger.info('Validation iu score: {}'.format(iu))
 
-            writer.add_scalar("train_total_loss", total_train_loss / (iteration + 1), epoch)
-            writer.add_scalar("lr", current_lr, epoch)
+                logger.info('Validation precion score: {}'.format(precion))
+                logger.info('Validation recall score: {}'.format(recall))
+                logger.info('Validation f1 score: {}'.format(f1))
+
+                logger.info('Validation miou score: {}'.format(val_score))
+                logger.info('Validation fwiou score: {}'.format(fwiou))
+
+                logger.info('Validation Dice score: {}'.format(Dice))
+                logger.info('本次训练时长: {} Seconds'.format(one_epoch_time))
+
+                epochs_score.append(val_score)
+
+                # tensorboard 记录
+                #注意目前暂且iu f1这种单别数组的形式还进不了tensorboard
+                writer.add_scalar("train_total_loss", total_train_loss /( iteration + 1), epoch)
+                writer.add_scalar("lr", current_lr, epoch)
+
+                writer.add_scalar("valloss", val_loss, epoch)
+                writer.add_scalar("valmiou", val_score, epoch)
+                writer.add_scalar("valfmiou", fwiou, epoch)
+
+                writer.add_scalar("valDice", Dice, epoch)
+                writer.add_scalar('best_epoch_index', epochs_score.index(max(epochs_score)) + 1, epoch)
+            else:
+                acc_global, acc, iu, precion, recall, f1, miou = evalue_iou_miou_Dice(net, val_loader, device, num_class,
+                                                                       isResize=imgshape_base)
+                val_score = miou  #
+                fwiou = evalue_Fwiou(net, val_loader, device, num_class, isResize=imgshape_base)
+
+                val_loss = evaluateloss(net, val_loader, device, numclass=num_class, ignoreindex=ignoreindex,
+                                                  isresize=imgshape_base)
+                logger.info('Validation loss : {}'.format(val_loss))
+                logger.info('Validation acc_global score: {}'.format(acc_global))
+                logger.info('Validation acc score: {}'.format(acc))
+                logger.info('Validation iu score: {}'.format(iu))
+                logger.info('Validation fwiou score: {}'.format(fwiou))
+
+
+                logger.info('Validation precion score: {}'.format(precion))
+                logger.info('Validation recall score: {}'.format(recall))
+                logger.info('Validation f1 score: {}'.format(f1))
+                logger.info('Validation miou score: {}'.format(val_score))
+
+                logger.info('本次训练时长: {} Seconds'.format(one_epoch_time))
+
+                current_miou = val_score
+                epochs_score.append(val_score)
+
+                # tensorboard 记录
+                writer.add_scalar("train_total_loss", total_train_loss / (iteration + 1), epoch)
+                writer.add_scalar("lr", current_lr, epoch)
+
+                writer.add_scalar("valloss", val_loss, epoch)
+                writer.add_scalar("valmiou", val_score, epoch)
+                writer.add_scalar("valfmiou", fwiou, epoch)
+
+                writer.add_scalar('best_epoch_index', epochs_score.index(max(epochs_score)) + 1, epoch)
 
         print('Finish Validation')
         scheduler.step()  # 这个地方是按照迭代来调整学习率的
@@ -287,12 +330,13 @@ def get_args():
     parser.add_argument('--learning-rate', '-l', metavar='LR', type=float, default=1e-3,
                         help='Learning rate', dest='lr')
     parser.add_argument('--load', '-f', type=str, default="", help='Load model from a .pth file')  # 有没有预训练。。
-    parser.add_argument('--ignore_index', '-i', type=int, dest='ignore_index', default=255,
+    parser.add_argument('--ignore-index', '-i', type=int, dest='ignore_index', default=255,
                         help='ignore index defult 100')  # 有没有预训练。。
     parser.add_argument('--bilinear', action='store_true', default=False, help='Use bilinear upsampling')
     parser.add_argument('--resume', '-r', type=str, default=False, help='is use Resume')
-    parser.add_argument('--valIndex', '-vI', type=str, default=["Valloss","IouMiouP"], help='评价指标要使用哪些,注意IouMiouP= acc_global, acc, iu,precion,recall,f1,miou,并且建议旨在2分类的时候用dice否则会出错')
-    parser.add_argument('--classes', '-c', type=int, default=9, help='Number of classes')
+    parser.add_argument('--useDice', '-d', type=str, default=True, help='is use Dice')
+    parser.add_argument('--useFWiou', '-fw', type=str, default=True, help='is use fwiou')
+    parser.add_argument('--classes', '-c', type=int, default=2, help='Number of classes')
 
     return parser.parse_args()
 
@@ -317,7 +361,8 @@ if __name__ == '__main__':
                   device=device,
                   ignoreindex=args.ignore_index,
                   num_class = args.classes,
-                  valIndex= args.valIndex
+                  useDice=args.useDice,
+                  useFWiou=args.useFWiou,
 
                   )
     except KeyboardInterrupt:
